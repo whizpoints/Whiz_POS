@@ -157,11 +157,35 @@ export default function BusinessRegistration() {
 
   const handleRestoreBackup = async () => {
     if (!window.electron) {
-      alert('Restore is only supported in Desktop mode');
+      Swal.fire({
+        icon: 'warning',
+        title: 'Unsupported',
+        text: 'Restore is only supported in Desktop mode',
+        confirmButtonColor: '#3b82f6',
+        customClass: { popup: 'rounded-2xl shadow-2xl border border-gray-100' }
+      });
       return;
     }
 
-    if (!window.confirm('WARNING: Restoring will overwrite all current local data with the backup archive. Are you sure you want to proceed?')) {
+    const confirmResult = await Swal.fire({
+      title: 'Import Backup Archive',
+      text: 'WARNING: Restoring will overwrite all current local data with the backup archive. Are you absolutely sure you want to proceed?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, Overwrite & Restore',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      customClass: {
+        popup: 'rounded-2xl shadow-2xl border border-gray-100',
+        title: 'text-xl font-bold text-gray-900',
+        confirmButton: 'rounded-lg px-6 py-2.5 font-semibold text-white',
+        cancelButton: 'rounded-lg px-6 py-2.5 font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200'
+      }
+    });
+
+    if (!confirmResult.isConfirmed) {
       return;
     }
 
@@ -172,21 +196,42 @@ export default function BusinessRegistration() {
       const result = await window.electron.restoreData();
       if (result.success) {
         soundManager.playSuccess();
-        alert('Restore successful. Restarting application...');
+        
+        await Swal.fire({
+          icon: 'success',
+          title: 'Restore Successful!',
+          text: 'Data has been successfully imported. The application will now restart.',
+          showConfirmButton: false,
+          timer: 2500,
+          timerProgressBar: true,
+          allowOutsideClick: false,
+          customClass: { popup: 'rounded-2xl shadow-2xl border border-gray-100' }
+        });
+
         // Clear persisted zustand state to force reload from restored files
         localStorage.removeItem('pos-storage');
-        setTimeout(() => {
-          window.location.reload();
-        }, 2000);
+        window.location.reload();
       } else {
         if (result.error !== 'User cancelled restore') {
           soundManager.playError();
-          alert(result.error);
+          Swal.fire({
+            icon: 'error',
+            title: 'Restore Failed',
+            text: result.error,
+            confirmButtonColor: '#ef4444',
+            customClass: { popup: 'rounded-2xl shadow-2xl' }
+          });
         }
       }
     } catch (e: any) {
       soundManager.playError();
-      alert(e.message);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error Encountered',
+        text: e.message,
+        confirmButtonColor: '#ef4444',
+        customClass: { popup: 'rounded-2xl shadow-2xl' }
+      });
     } finally {
       setIsSubmitting(false);
     }
