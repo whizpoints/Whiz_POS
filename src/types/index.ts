@@ -30,6 +30,15 @@ export interface Transaction {
   change?: number;
   mpesaCode?: string;
   phoneNumber?: string;
+  mpesaName?: string;
+  kraDetails?: {
+    qrCode?: string;
+    invoiceNumber?: string;
+    date?: string;
+    receiptNumber?: string;
+    url?: string;
+    controlCode?: string;
+  };
 }
 
 export interface CreditCustomer {
@@ -95,4 +104,13 @@ export interface BusinessSetup {
   locationName?: string;
   autoLogoffEnabled?: boolean;
   autoLogoffMinutes?: number;
+  kraEnabled?: boolean;
+  kraEndpoint?: string;
+  disableReceiptPrinting?: boolean;
+  showDeveloperFooter?: boolean;
+  mpesaConfig?: {
+    enabled: boolean;
+    backendUrl: string;
+    apiKey: string;
+  };
 }

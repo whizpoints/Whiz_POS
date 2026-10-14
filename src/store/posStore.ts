@@ -432,7 +432,7 @@ interface PosState {
   setKeyboardInput: (value: string) => void;
   setCurrentPage: (page: PosState['currentPage']) => void;
 
-  completeTransaction: (paymentMethod: 'cash' | 'mpesa' | 'credit', creditCustomer?: string, additionalData?: { amountTendered?: number; change?: number; mpesaCode?: string; phoneNumber?: string }) => void;
+  completeTransaction: (paymentMethod: 'cash' | 'mpesa' | 'credit', creditCustomer?: string, additionalData?: { amountTendered?: number; change?: number; mpesaCode?: string; phoneNumber?: string }) => Promise<void>;
   reprintTransaction: (transactionId: string) => void;
   reverseTransaction: (transactionId: string) => void;
   saveTransaction: (transaction: Transaction) => void;
@@ -718,7 +718,7 @@ export const usePosStore = create<PosState>()(
       closeTransactionSuccessPopup: () => {
         set({ isTransactionSuccessPopupOpen: false, lastCompletedTransaction: null });
       },
-      completeTransaction: (paymentMethod, creditCustomerName, additionalData) => {
+      completeTransaction: async (paymentMethod, creditCustomerName, additionalData) => {
         const state = get();
         if (!state.currentCashier) return;
 
@@ -726,7 +726,7 @@ export const usePosStore = create<PosState>()(
         const tax = 0; // Assuming tax is handled elsewhere or is 0
         const total = subtotal + tax;
 
-        const transaction: Transaction = {
+        let transaction: Transaction = {
           id: `TXN${Date.now()}`,
           timestamp: new Date().toISOString(),
           items: [...state.cart],
@@ -739,6 +739,37 @@ export const usePosStore = create<PosState>()(
           status: 'completed',
           ...additionalData
         };
+
+        // --- KRA SYNC ---
+        if (state.businessSetup?.kraEnabled && state.isOnline) {
+           const backendUrl = state.businessSetup?.backOfficeUrl || state.businessSetup?.apiUrl;
+           const apiKey = state.businessSetup?.backOfficeApiKey || state.businessSetup?.apiKey;
+           if (backendUrl && apiKey) {
+               try {
+                   const apiUrl = backendUrl.replace(/\/$/, '').replace(/\/api$/, '') || '';
+                   const res = await fetch(`${apiUrl}/api/kra/invoice`, {
+                       method: 'POST',
+                       headers: {
+                           'Content-Type': 'application/json',
+                           'Authorization': `Bearer ${apiKey}`,
+                           'X-API-KEY': apiKey
+                       },
+                       body: JSON.stringify(transaction)
+                   });
+                   if (res.ok) {
+                       const data = await res.json();
+                       if (data.kraDetails) {
+                           transaction.kraDetails = data.kraDetails;
+                       }
+                   } else {
+                       throw new Error(`KRA backend responded with status: ${res.status}`);
+                   }
+               } catch (err: any) {
+                   console.error("KRA generation failed:", err);
+                   throw new Error("Failed to communicate with KRA backend. " + err.message);
+               }
+           }
+        }
 
         // --- ABSOLUTELY FIRST: SHOW SUCCESS POPUP ---
         if ((state.businessSetup as any)?.disableReceiptPrinting) {
@@ -813,11 +844,11 @@ export const usePosStore = create<PosState>()(
             }
         }
 
-        // Print receipt if enabled
-        if (!((state.businessSetup as any)?.disableReceiptPrinting) && window.electron && state.businessSetup) {
-            window.electron.printReceipt(transaction, state.businessSetup, false);
-        }
-      },
+          // Print receipt if enabled
+          if (!((state.businessSetup as any)?.disableReceiptPrinting) && window.electron && state.businessSetup) {
+              window.electron.printReceipt(transaction, state.businessSetup, false);
+          }
+        },
 
       reprintTransaction: (transactionId) => {
         const state = get();

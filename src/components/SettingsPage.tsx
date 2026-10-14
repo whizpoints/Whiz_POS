@@ -464,6 +464,30 @@ export default function SettingsPage() {
                         </button>
                     </div>
                 </div>
+                </div>
+               <div className="md:col-span-2">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className='flex items-center'>
+                        <Database className="w-5 h-5 mr-2 text-gray-600" />
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">KRA eTIMS Integration (Web Portal)</label>
+                            <p className="text-xs text-gray-500">Enable fetching KRA VSCU invoices from backend API</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                        <span className="text-sm text-gray-600">{businessData.kraEnabled ? 'Enabled' : 'Disabled'}</span>
+                        <button
+                            onClick={() => {
+                                const newVal = !businessData.kraEnabled;
+                                setBusinessData(prev => ({ ...prev, kraEnabled: newVal }));
+                                saveBusinessSetup({ ...businessSetup, ...businessData, kraEnabled: newVal, isSetup: true } as any);
+                            }}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${businessData.kraEnabled ? 'bg-blue-600' : 'bg-gray-200'}`}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${businessData.kraEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                    </div>
+                </div>
               </div>
             </div>
           </div>

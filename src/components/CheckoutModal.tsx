@@ -22,6 +22,7 @@ export default function CheckoutModal() {
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
   const [amountTendered, setAmountTendered] = useState<string>('');
   const [isStkPushing, setIsStkPushing] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
   const { toast } = useToast();
 
   // M-Pesa specific state
@@ -68,8 +69,9 @@ export default function CheckoutModal() {
    * Finalizes the transaction.
    * Validates credit customer selection if payment method is credit.
    */
-  const handleComplete = (overrideMpesaCode?: string | React.MouseEvent | any) => {
+  const handleComplete = async (overrideMpesaCode?: string | React.MouseEvent | any, overrideMpesaName?: string) => {
     const finalMpesaCode = typeof overrideMpesaCode === 'string' ? overrideMpesaCode : undefined;
+    const finalMpesaName = typeof overrideMpesaName === 'string' ? overrideMpesaName : undefined;
     if (paymentMethod === 'credit' && !creditCustomer.trim()) {
       soundManager.playError();
       alert('Please select a customer for credit payment');
@@ -81,8 +83,7 @@ export default function CheckoutModal() {
       return;
     }
 
-    soundManager.playCheckout();
-
+    setIsCompleting(true);
     let additionalData: any = {};
     if (paymentMethod === 'cash' && amountTendered !== '') {
         additionalData.amountTendered = tendered;
@@ -91,13 +92,22 @@ export default function CheckoutModal() {
     if (paymentMethod === 'mpesa') {
         if (finalMpesaCode || mpesaCode) additionalData.mpesaCode = finalMpesaCode || mpesaCode;
         if (phoneNumber) additionalData.phoneNumber = phoneNumber;
+        if (finalMpesaName) additionalData.mpesaName = finalMpesaName;
     }
 
-    completeTransaction(
-        paymentMethod,
-        paymentMethod === 'credit' ? creditCustomer : undefined,
-        additionalData
-    );
+    try {
+        await completeTransaction(
+            paymentMethod,
+            paymentMethod === 'credit' ? creditCustomer : undefined,
+            additionalData
+        );
+        soundManager.playCheckout();
+    } catch (err: any) {
+        toast("Checkout Failed: " + err.message, "error");
+        soundManager.playError();
+    } finally {
+        setIsCompleting(false);
+    }
   };
 
   /**
@@ -181,6 +191,7 @@ export default function CheckoutModal() {
       let attempts = 0;
       let isSuccess = false;
       let finalCode = "";
+      let finalName = "";
       const maxAttempts = 15; // 45 seconds polling
 
       while (attempts < maxAttempts && !isSuccess) {
@@ -200,6 +211,7 @@ export default function CheckoutModal() {
              if (statusData.status === 'completed' || statusData.status === 'Success' || statusData.ResultCode === 0) {
                isSuccess = true;
                finalCode = statusData.receiptNumber || statusData.MpesaReceiptNumber || "AUTO-CONFIRMED";
+               finalName = statusData.customerName || statusData.CustomerName || statusData.MpesaCustomerName || statusData.name || statusData.receiptName || statusData.senderName;
                setMpesaCode(finalCode);
              } else if (statusData.status === 'failed' || (statusData.ResultCode !== undefined && statusData.ResultCode !== 0)) {
                throw new Error(statusData.ResultDesc || 'Transaction failed or was cancelled by user.');
@@ -213,7 +225,7 @@ export default function CheckoutModal() {
       if (isSuccess) {
         soundManager.playCheckout();
         toast("Payment Received Successfully!", "info");
-        handleComplete(finalCode);
+        handleComplete(finalCode, finalName);
       } else {
         throw new Error("Transaction timed out waiting for confirmation.");
       }
@@ -234,15 +246,15 @@ export default function CheckoutModal() {
     return (
         <button
           onClick={() => handlePaymentMethodChange(method)}
-          className={`w-full flex items-center p-4 rounded-xl border-2 transition-all duration-200 ${
+          className={`relative flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all duration-200 ${
             isSelected
-              ? 'border-blue-500 bg-blue-50 shadow-lg'
+              ? 'border-blue-500 bg-blue-50 shadow-md scale-105'
               : 'border-gray-200 hover:border-gray-300'
           }`}
         >
           {icon}
-          <span className="font-semibold text-lg ml-4">{label}</span>
-          {isSelected && <CheckCircle className="w-6 h-6 text-blue-500 ml-auto" />}
+          <span className="font-semibold text-sm mt-2">{label}</span>
+          {isSelected && <CheckCircle className="w-4 h-4 text-blue-500 absolute top-2 right-2" />}
         </button>
     );
   }
@@ -278,32 +290,33 @@ export default function CheckoutModal() {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <h3 className="font-semibold text-gray-700 mb-2 text-lg">Select Payment Method</h3>
+              <div className="space-y-3">
+                <h3 className="font-semibold text-gray-700 mb-2 text-md">Select Payment Method</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <PaymentButton
+                      method="cash"
+                      current={paymentMethod}
+                      setMethod={setPaymentMethod}
+                      icon={<Wallet className="w-6 h-6 text-green-500" />}
+                      label="Cash"
+                  />
 
-                <PaymentButton
-                    method="cash"
-                    current={paymentMethod}
-                    setMethod={setPaymentMethod}
-                    icon={<Wallet className="w-8 h-8 text-green-500" />}
-                    label="Cash"
-                />
+                  <PaymentButton
+                      method="mpesa"
+                      current={paymentMethod}
+                      setMethod={setPaymentMethod}
+                      icon={<Smartphone className="w-6 h-6 text-blue-500" />}
+                      label="M-Pesa"
+                  />
 
-                <PaymentButton
-                    method="mpesa"
-                    current={paymentMethod}
-                    setMethod={setPaymentMethod}
-                    icon={<Smartphone className="w-8 h-8 text-blue-500" />}
-                    label="M-Pesa"
-                />
-
-                <PaymentButton
-                    method="credit"
-                    current={paymentMethod}
-                    setMethod={setPaymentMethod}
-                    icon={<CreditCard className="w-8 h-8 text-orange-500" />}
-                    label="Credit"
-                />
+                  <PaymentButton
+                      method="credit"
+                      current={paymentMethod}
+                      setMethod={setPaymentMethod}
+                      icon={<CreditCard className="w-6 h-6 text-orange-500" />}
+                      label="Credit"
+                  />
+                </div>
               </div>
 
               <div className="mt-8">
@@ -451,13 +464,15 @@ export default function CheckoutModal() {
                   <button
                     onClick={handleComplete}
                     disabled={
+                      isCompleting ||
                       (paymentMethod === 'cash' && amountTendered !== '' && tendered < total) ||
                       (paymentMethod === 'mpesa' && businessSetup?.mpesaConfig?.enabled && mpesaVerificationMode === 'manual' && mpesaCode.length < 5) ||
                       (paymentMethod === 'credit' && !creditCustomer)
                     }
-                    className="flex-[2] px-6 py-4 bg-green-500 text-white font-bold text-lg rounded-xl hover:bg-green-600 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+                    className="flex-[2] px-6 py-4 bg-green-500 text-white font-bold text-lg rounded-xl hover:bg-green-600 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] flex items-center justify-center gap-2"
                   >
-                    Complete Payment
+                    {isCompleting && <Loader2 className="w-5 h-5 animate-spin" />}
+                    {isCompleting ? 'Processing...' : 'Complete Payment'}
                   </button>
                 </div>
             </div>
